@@ -1,0 +1,41 @@
+From bda25a9c0c3c405d5cdd485f5bbb0b401bb27275 Mon Sep 17 00:00:00 2001
+From: Jan Pavlinec <jan.pavlinec@nic.cz>
+Date: Thu, 8 Nov 2018 15:36:58 +0100
+Subject: [PATCH] qpdf: update to version 8.2.0 (security fix)
+
+Issue https://gitlab.labs.nic.cz/turris/turris-os-packages/issues/157
+---
+ utils/qpdf/Makefile | 6 +++---
+ 1 file changed, 3 insertions(+), 3 deletions(-)
+
+diff --git a/utils/qpdf/Makefile b/utils/qpdf/Makefile
+index 21fce02..8317631 100644
+--- a/utils/qpdf/Makefile
++++ b/utils/qpdf/Makefile
+@@ -8,12 +8,12 @@
+ include $(TOPDIR)/rules.mk
+ 
+ PKG_NAME:=qpdf
+-PKG_VERSION:=6.0.0
++PKG_VERSION:=8.2.0
+ PKG_RELEASE:=1
+ 
+ PKG_SOURCE:=$(PKG_NAME)-$(PKG_VERSION).tar.gz
+ PKG_SOURCE_URL:=@SF/$(PKG_NAME)
+-PKG_MD5SUM:=e014bd3ecf1c4d1a520bbc14d84ac20e
++PKG_MD5SUM:=debf7fd07b5336d8e772f6f6d090b124353f99d8b74030dd0feefe7a11e35cbd
+ 
+ PKG_INSTALL:=1
+ 
+@@ -23,7 +23,7 @@ define Package/qpdf
+   SECTION:=utils
+   CATEGORY:=Utilities
+   TITLE:=QPDF is a command-line program for transformations on PDF files.
+-  DEPENDS:= +libpcre +zlib +libstdcpp
++  DEPENDS:= +libpcre +zlib +libstdcpp +libjpeg
+   URL:=http://qpdf.sourceforge.net/
+   SUBMENU:=Printing
+ endef
+-- 
+2.7.4
+
