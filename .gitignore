@@ -26,3 +26,5 @@ TAGS*~
 git-src
 .vagrant/
 /Vagrantfile
+
+/.idea/

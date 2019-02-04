@@ -1,0 +1,25 @@
+--- a/include/common.h
++++ b/include/common.h
+@@ -28,6 +28,9 @@
+ #include <errno.h>
+ #include <inttypes.h>
+ #include "version.h"
++#ifdef __GLIBC__
++#include <sys/sysmacros.h>
++#endif
+ 
+ #ifndef PROGRAM_NAME
+ # error "You must define PROGRAM_NAME before including this header"
+diff --git a/mkfs.ubifs/compr.c b/mkfs.ubifs/compr.c
+index d0b5a0c..9b83a47 100644
+--- a/mkfs.ubifs/compr.c
++++ b/mkfs.ubifs/compr.c
+@@ -86,6 +86,8 @@ static int zlib_deflate(void *in_buf, size_t in_len, void *out_buf,
+ #ifndef WITHOUT_LZO
+ #include <lzo/lzo1x.h>
+ 
++#undef lzo_init
++
+ static void *lzo_mem;
+ 
+ static int lzo_init(void)

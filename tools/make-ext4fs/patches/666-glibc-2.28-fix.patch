@@ -1,0 +1,658 @@
+--- a/Makefile
++++ b/Makefile
+@@ -1,6 +1,12 @@
+ CC ?= gcc
+ CFLAGS += -Iinclude -Ilibsparse/include
+
++ifeq ($(STATIC),1)
++  ZLIB := -Wl,-Bstatic -lz -Wl,-Bdynamic
++else
++  ZLIB := -lz
++endif
++
+ OBJ := \
+     allocate.o \
+ 	canned_fs_config.o \
+@@ -21,7 +27,7 @@ OBJ := \
+ 	$(CC) $(CFLAGS) -c -o $@ $^
+
+ make_ext4fs: $(OBJ) libsparse/libsparse.a
+-	$(CC) -o $@ $^ -lz
++	$(CC) -o $@ $^ $(ZLIB)
+
+ libsparse/libsparse.a:
+ 	$(MAKE) -C libsparse/ libsparse.a
+diff --git a/allocate.h b/allocate.h
+index 5c26792..a6cd073 100644
+--- a/allocate.h
++++ b/allocate.h
+@@ -38,9 +38,9 @@ struct block_allocation {
+ };
+
+
+-void block_allocator_init();
+-void block_allocator_free();
+-u32 allocate_block();
++void block_allocator_init(void);
++void block_allocator_free(void);
++u32 allocate_block(void);
+ struct block_allocation *allocate_blocks(u32 len);
+ int block_allocation_num_regions(struct block_allocation *alloc);
+ int block_allocation_len(struct block_allocation *alloc);
+@@ -58,7 +58,7 @@ void add_directory(u32 inode);
+ u16 get_directories(int bg);
+ u16 get_bg_flags(int bg);
+ void init_unused_inode_tables(void);
+-u32 allocate_inode();
++u32 allocate_inode(void);
+ void free_alloc(struct block_allocation *alloc);
+ int reserve_oob_blocks(struct block_allocation *alloc, int blocks);
+ int advance_blocks(struct block_allocation *alloc, int blocks);
+@@ -67,7 +67,7 @@ int last_region(struct block_allocation *alloc);
+ void rewind_alloc(struct block_allocation *alloc);
+ void append_region(struct block_allocation *alloc,
+ 	u32 block, u32 len, int bg);
+-struct block_allocation *create_allocation();
++struct block_allocation *create_allocation(void);
+ int append_oob_allocation(struct block_allocation *alloc, u32 len);
+ void print_blocks(FILE* f, struct block_allocation *alloc);
+
+diff --git a/contents.c b/contents.c
+index 1e5361e..9b65dbe 100644
+--- a/contents.c
++++ b/contents.c
+@@ -103,7 +103,7 @@ u32 make_directory(u32 dir_inode_num, u32 entries, struct dentry *dentries,
+ 	len = blocks * info.block_size;
+
+ 	if (dir_inode_num) {
+-		inode_num = allocate_inode(info);
++		inode_num = allocate_inode();
+ 	} else {
+ 		dir_inode_num = EXT4_ROOT_INO;
+ 		inode_num = EXT4_ROOT_INO;
+@@ -171,7 +171,7 @@ u32 make_file(const char *filename, u64 len)
+ 	struct ext4_inode *inode;
+ 	u32 inode_num;
+
+-	inode_num = allocate_inode(info);
++	inode_num = allocate_inode();
+ 	if (inode_num == EXT4_ALLOCATE_FAILED) {
+ 		error("failed to allocate inode\n");
+ 		return EXT4_ALLOCATE_FAILED;
+@@ -206,7 +206,7 @@ u32 make_link(const char *link)
+ 	u32 inode_num;
+ 	u32 len = strlen(link);
+
+-	inode_num = allocate_inode(info);
++	inode_num = allocate_inode();
+ 	if (inode_num == EXT4_ALLOCATE_FAILED) {
+ 		error("failed to allocate inode\n");
+ 		return EXT4_ALLOCATE_FAILED;
+@@ -247,7 +247,7 @@ u32 make_special(const char *path)
+ 		return EXT4_ALLOCATE_FAILED;
+ 	}
+
+-	inode_num = allocate_inode(info);
++	inode_num = allocate_inode();
+ 	if (inode_num == EXT4_ALLOCATE_FAILED) {
+ 		error("failed to allocate inode\n");
+ 		return EXT4_ALLOCATE_FAILED;
+diff --git a/contents.h b/contents.h
+index 0a3cbd4..022b6aa 100644
+--- a/contents.h
++++ b/contents.h
+@@ -39,6 +39,6 @@ u32 make_link(const char *link);
+ u32 make_special(const char *path);
+ int inode_set_permissions(u32 inode_num, u16 mode, u16 uid, u16 gid, u32 mtime);
+ int inode_set_capabilities(u32 inode_num, uint64_t capabilities);
+-struct block_allocation* get_saved_allocation_chain();
++struct block_allocation* get_saved_allocation_chain(void);
+
+ #endif
+diff --git a/ext4_utils.c b/ext4_utils.c
+index 2f1dbb2..1a886d7 100644
+--- a/ext4_utils.c
++++ b/ext4_utils.c
+@@ -94,9 +94,9 @@ int ext4_bg_has_super_block(int bg)
+ /* Function to read the primary superblock */
+ void read_sb(int fd, struct ext4_super_block *sb)
+ {
+-	off64_t ret;
++	off_t ret;
+
+-	ret = lseek64(fd, 1024, SEEK_SET);
++	ret = lseek(fd, 1024, SEEK_SET);
+ 	if (ret < 0)
+ 		critical_error_errno("failed to seek to superblock");
+
+@@ -110,9 +110,9 @@ void read_sb(int fd, struct ext4_super_block *sb)
+ /* Function to write a primary or backup superblock at a given offset */
+ void write_sb(int fd, unsigned long long offset, struct ext4_super_block *sb)
+ {
+-	off64_t ret;
++	off_t ret;
+
+-	ret = lseek64(fd, offset, SEEK_SET);
++	ret = lseek(fd, offset, SEEK_SET);
+ 	if (ret < 0)
+ 		critical_error_errno("failed to seek to superblock");
+
+@@ -492,18 +492,18 @@ u64 parse_num(const char *arg)
+
+ int read_ext(int fd, int verbose)
+ {
+-	off64_t ret;
++	off_t ret;
+ 	struct ext4_super_block sb;
+
+ 	read_sb(fd, &sb);
+
+ 	ext4_parse_sb_info(&sb);
+
+-	ret = lseek64(fd, info.len, SEEK_SET);
++	ret = lseek(fd, info.len, SEEK_SET);
+ 	if (ret < 0)
+ 		critical_error_errno("failed to seek to end of input image");
+
+-	ret = lseek64(fd, info.block_size * (aux_info.first_data_block + 1), SEEK_SET);
++	ret = lseek(fd, info.block_size * (aux_info.first_data_block + 1), SEEK_SET);
+ 	if (ret < 0)
+ 		critical_error_errno("failed to seek to block group descriptors");
+
+diff --git a/ext4_utils.h b/ext4_utils.h
+index 2ad05a0..a5c1ae0 100644
+--- a/ext4_utils.h
++++ b/ext4_utils.h
+@@ -27,9 +27,12 @@ extern "C" {
+ #define _FILE_OFFSET_BITS 64
+ #define _LARGEFILE64_SOURCE 1
+ #include <sys/types.h>
+-#include <unistd.h>
+
+-#include <sys/types.h>
++#ifdef __GLIBC__
++#include <sys/sysmacros.h>
++#endif
++
++#include <unistd.h>
+ #include <errno.h>
+ #include <stdarg.h>
+ #include <stdio.h>
+@@ -38,13 +41,6 @@ extern "C" {
+ #include <setjmp.h>
+ #include <stdint.h>
+
+-#if defined(__APPLE__) && defined(__MACH__)
+-#define lseek64 lseek
+-#define ftruncate64 ftruncate
+-#define mmap64 mmap
+-#define off64_t off_t
+-#endif
+-
+ #include "ext4_sb.h"
+
+ extern int force;
+diff --git a/ext4fixup.c b/ext4fixup.c
+index c919176..f33315a 100644
+--- a/ext4fixup.c
++++ b/ext4fixup.c
+@@ -27,11 +27,6 @@
+ #include <fcntl.h>
+ #include <unistd.h>
+
+-#if defined(__APPLE__) && defined(__MACH__)
+-#define lseek64 lseek
+-#define off64_t off_t
+-#endif
+-
+ /* The inode block count for a file/directory is in units of 512 byte blocks,
+  * _NOT_ the filesystem block size!
+  */
+@@ -88,7 +83,7 @@ static int get_fs_fixup_state(int fd)
+         return no_write_fixup_state;
+     }
+
+-    lseek64(fd, 0, SEEK_SET);
++    lseek(fd, 0, SEEK_SET);
+     len = read(fd, &magic, sizeof(magic));
+     if (len != sizeof(magic)) {
+         critical_error("cannot read fixup_state\n");
+@@ -137,7 +132,7 @@ static int set_fs_fixup_state(int fd, int state)
+             break;
+     }
+
+-    lseek64(fd, 0, SEEK_SET);
++    lseek(fd, 0, SEEK_SET);
+     len = write(fd, &magic, sizeof(magic));
+     if (len != sizeof(magic)) {
+         critical_error("cannot write fixup_state\n");
+@@ -162,7 +157,7 @@ static int set_fs_fixup_state(int fd, int state)
+ static int read_inode(int fd, unsigned int inum, struct ext4_inode *inode)
+ {
+     unsigned int bg_num, bg_offset;
+-    off64_t inode_offset;
++    off_t inode_offset;
+     int len;
+
+     bg_num = (inum-1) / info.inodes_per_group;
+@@ -171,7 +166,7 @@ static int read_inode(int fd, unsigned int inum, struct ext4_inode *inode)
+     inode_offset = ((unsigned long long)aux_info.bg_desc[bg_num].bg_inode_table * info.block_size) +
+                     (bg_offset * info.inode_size);
+
+-    if (lseek64(fd, inode_offset, SEEK_SET) < 0) {
++    if (lseek(fd, inode_offset, SEEK_SET) < 0) {
+         critical_error_errno("failed to seek to inode %d\n", inum);
+     }
+
+@@ -185,12 +180,12 @@ static int read_inode(int fd, unsigned int inum, struct ext4_inode *inode)
+
+ static int read_block(int fd, unsigned long long block_num, void *block)
+ {
+-    off64_t off;
++    off_t off;
+     unsigned int len;
+
+     off = block_num * info.block_size;
+
+-    if (lseek64(fd, off, SEEK_SET) , 0) {
++    if (lseek(fd, off, SEEK_SET) , 0) {
+         critical_error_errno("failed to seek to block %lld\n", block_num);
+     }
+
+@@ -204,7 +199,7 @@ static int read_block(int fd, unsigned long long block_num, void *block)
+
+ static int write_block(int fd, unsigned long long block_num, void *block)
+ {
+-    off64_t off;
++    off_t off;
+     unsigned int len;
+
+     if (no_write) {
+@@ -213,7 +208,7 @@ static int write_block(int fd, unsigned long long block_num, void *block)
+
+     off = block_num * info.block_size;
+
+-    if (lseek64(fd, off, SEEK_SET) < 0) {
++    if (lseek(fd, off, SEEK_SET) < 0) {
+         critical_error_errno("failed to seek to block %lld\n", block_num);
+     }
+
+@@ -259,7 +254,7 @@ static void check_inode_bitmap(int fd, unsigned int bg_num)
+ /* Update the superblock and bgdesc of the specified block group */
+ static int update_superblocks_and_bg_desc(int fd, int state)
+ {
+-    off64_t ret;
++    off_t ret;
+     struct ext4_super_block sb;
+     unsigned int num_block_groups, total_new_inodes;
+     unsigned int i;
+@@ -323,7 +318,7 @@ static int update_superblocks_and_bg_desc(int fd, int state)
+                          &sb);
+             }
+
+-            ret = lseek64(fd, ((unsigned long long)i * info.blocks_per_group * info.block_size) +
++            ret = lseek(fd, ((unsigned long long)i * info.blocks_per_group * info.block_size) +
+                               (info.block_size * (aux_info.first_data_block + 1)), SEEK_SET);
+             if (ret < 0)
+                 critical_error_errno("failed to seek to block group descriptors");
+@@ -409,7 +404,7 @@ static int get_extent_ents(struct ext4_extent_header *ext_hdr, unsigned long lon
+ {
+     int i, j;
+     struct ext4_extent *extent;
+-    off64_t fs_block_num;
++    off_t fs_block_num;
+
+     if (ext_hdr->eh_depth != 0) {
+         critical_error("get_extent_ents called with eh_depth != 0\n");
+@@ -421,7 +416,7 @@ static int get_extent_ents(struct ext4_extent_header *ext_hdr, unsigned long lon
+     extent = (struct ext4_extent *)(ext_hdr + 1);
+
+     for (i = 0; i < ext_hdr->eh_entries; i++) {
+-         fs_block_num = ((off64_t)extent->ee_start_hi << 32) | extent->ee_start_lo;
++         fs_block_num = ((off_t)extent->ee_start_hi << 32) | extent->ee_start_lo;
+          for (j = 0; j < extent->ee_len; j++) {
+              block_list[extent->ee_block+j] = fs_block_num+j;
+          }
+@@ -436,7 +431,7 @@ static int get_extent_idx(int fd, struct ext4_extent_header *ext_hdr, unsigned l
+     int i;
+     struct ext4_extent_idx *extent_idx;
+     struct ext4_extent_header *tmp_ext_hdr;
+-    off64_t fs_block_num;
++    off_t fs_block_num;
+     unsigned char block[MAX_EXT4_BLOCK_SIZE];
+
+     /* Sanity check */
+@@ -450,7 +445,7 @@ static int get_extent_idx(int fd, struct ext4_extent_header *ext_hdr, unsigned l
+     extent_idx = (struct ext4_extent_idx *)(ext_hdr + 1);
+
+     for (i = 0; i < ext_hdr->eh_entries; i++) {
+-         fs_block_num = ((off64_t)extent_idx->ei_leaf_hi << 32) | extent_idx->ei_leaf_lo;
++         fs_block_num = ((off_t)extent_idx->ei_leaf_hi << 32) | extent_idx->ei_leaf_lo;
+          read_block(fd, fs_block_num, block);
+          tmp_ext_hdr = (struct ext4_extent_header *)block;
+
+diff --git a/extent.c b/extent.c
+index 1900b10..7c5515e 100644
+--- a/extent.c
++++ b/extent.c
+@@ -55,7 +55,7 @@ static u8 *extent_create_backing(struct block_allocation *alloc,
+ static void extent_create_backing_file(struct block_allocation *alloc,
+ 	u64 backing_len, const char *filename)
+ {
+-	off64_t offset = 0;
++	off_t offset = 0;
+ 	for (; alloc != NULL && backing_len > 0; get_next_region(alloc)) {
+ 		u32 region_block;
+ 		u32 region_len;
+diff --git a/extent.h b/extent.h
+index a78a7b0..e4fc4eb 100644
+--- a/extent.h
++++ b/extent.h
+@@ -25,6 +25,6 @@ struct block_allocation* inode_allocate_file_extents(
+ 	struct ext4_inode *inode, u64 len, const char *filename);
+ u8 *inode_allocate_data_extents(struct ext4_inode *inode, u64 len,
+ 	u64 backing_len);
+-void free_extent_blocks();
++void free_extent_blocks(void);
+
+ #endif
+diff --git a/indirect.h b/indirect.h
+index cee8979..a503373 100644
+--- a/indirect.h
++++ b/indirect.h
+@@ -24,6 +24,6 @@ u8 *inode_allocate_data_indirect(struct ext4_inode *inode, unsigned long len,
+ 	unsigned long backing_len);
+ void inode_attach_resize(struct ext4_inode *inode,
+ 		struct block_allocation *alloc);
+-void free_indirect_blocks();
++void free_indirect_blocks(void);
+
+ #endif
+diff --git a/libsparse/output_file.c b/libsparse/output_file.c
+index a581c45..d435b1c 100644
+--- a/libsparse/output_file.c
++++ b/libsparse/output_file.c
+@@ -35,13 +35,6 @@
+ #include "sparse_crc32.h"
+ #include "sparse_format.h"
+
+-#if defined(__APPLE__) && defined(__MACH__)
+-#define lseek64 lseek
+-#define ftruncate64 ftruncate
+-#define mmap64 mmap
+-#define off64_t off_t
+-#endif
+-
+ #define min(a, b) \
+ 	({ typeof(a) _a = (a); typeof(b) _b = (b); (_a < _b) ? _a : _b; })
+
+@@ -119,12 +112,12 @@ static int file_open(struct output_file *out, int fd)
+
+ static int file_skip(struct output_file *out, int64_t cnt)
+ {
+-	off64_t ret;
++	off_t ret;
+ 	struct output_file_normal *outn = to_output_file_normal(out);
+
+-	ret = lseek64(outn->fd, cnt, SEEK_CUR);
++	ret = lseek(outn->fd, cnt, SEEK_CUR);
+ 	if (ret < 0) {
+-		error_errno("lseek64");
++		error_errno("lseek");
+ 		return -1;
+ 	}
+ 	return 0;
+@@ -135,7 +128,7 @@ static int file_pad(struct output_file *out, int64_t len)
+ 	int ret;
+ 	struct output_file_normal *outn = to_output_file_normal(out);
+
+-	ret = ftruncate64(outn->fd, len);
++	ret = ftruncate(outn->fd, len);
+ 	if (ret < 0) {
+ 		return -errno;
+ 	}
+@@ -191,7 +184,7 @@ static int gz_file_open(struct output_file *out, int fd)
+
+ static int gz_file_skip(struct output_file *out, int64_t cnt)
+ {
+-	off64_t ret;
++	off_t ret;
+ 	struct output_file_gz *outgz = to_output_file_gz(out);
+
+ 	ret = gzseek(outgz->gz_fd, cnt, SEEK_CUR);
+@@ -204,7 +197,7 @@ static int gz_file_skip(struct output_file *out, int64_t cnt)
+
+ static int gz_file_pad(struct output_file *out, int64_t len)
+ {
+-	off64_t ret;
++	off_t ret;
+ 	struct output_file_gz *outgz = to_output_file_gz(out);
+
+ 	ret = gztell(outgz->gz_fd);
+@@ -699,7 +692,7 @@ int write_fd_chunk(struct output_file *out, unsigned int len,
+ 	aligned_diff = offset - aligned_offset;
+ 	buffer_size = len + aligned_diff;
+
+-	char *data = mmap64(NULL, buffer_size, PROT_READ, MAP_SHARED, fd,
++	char *data = mmap(NULL, buffer_size, PROT_READ, MAP_SHARED, fd,
+ 			aligned_offset);
+ 	if (data == MAP_FAILED) {
+ 		return -errno;
+diff --git a/libsparse/sparse_read.c b/libsparse/sparse_read.c
+index 641d451..dd19eb4 100644
+--- a/libsparse/sparse_read.c
++++ b/libsparse/sparse_read.c
+@@ -35,11 +35,6 @@
+ #include "sparse_file.h"
+ #include "sparse_format.h"
+
+-#if defined(__APPLE__) && defined(__MACH__)
+-#define lseek64 lseek
+-#define off64_t off_t
+-#endif
+-
+ #define SPARSE_HEADER_MAJOR_VER 1
+ #define SPARSE_HEADER_LEN       (sizeof(sparse_header_t))
+ #define CHUNK_HEADER_LEN (sizeof(chunk_header_t))
+@@ -126,7 +121,7 @@ static int process_raw_chunk(struct sparse_file *s, unsigned int chunk_size,
+ 			len -= chunk;
+ 		}
+ 	} else {
+-		lseek64(fd, len, SEEK_CUR);
++		lseek(fd, len, SEEK_CUR);
+ 	}
+
+ 	return 0;
+@@ -216,7 +211,7 @@ static int process_crc32_chunk(int fd, unsigned int chunk_size, uint32_t crc32)
+ 	return 0;
+ }
+
+-static int process_chunk(struct sparse_file *s, int fd, off64_t offset,
++static int process_chunk(struct sparse_file *s, int fd, off_t offset,
+ 		unsigned int chunk_hdr_sz, chunk_header_t *chunk_header,
+ 		unsigned int cur_block, uint32_t *crc_ptr)
+ {
+@@ -277,7 +272,7 @@ static int sparse_file_read_sparse(struct sparse_file *s, int fd, bool crc)
+ 	uint32_t crc32 = 0;
+ 	uint32_t *crc_ptr = 0;
+ 	unsigned int cur_block = 0;
+-	off64_t offset;
++	off_t offset;
+
+ 	if (!copybuf) {
+ 		copybuf = malloc(COPY_BUF_SIZE);
+@@ -316,7 +311,7 @@ static int sparse_file_read_sparse(struct sparse_file *s, int fd, bool crc)
+ 		/* Skip the remaining bytes in a header that is longer than
+ 		 * we expected.
+ 		 */
+-		lseek64(fd, sparse_header.file_hdr_sz - SPARSE_HEADER_LEN, SEEK_CUR);
++		lseek(fd, sparse_header.file_hdr_sz - SPARSE_HEADER_LEN, SEEK_CUR);
+ 	}
+
+ 	for (i = 0; i < sparse_header.total_chunks; i++) {
+@@ -329,10 +324,10 @@ static int sparse_file_read_sparse(struct sparse_file *s, int fd, bool crc)
+ 			/* Skip the remaining bytes in a header that is longer than
+ 			 * we expected.
+ 			 */
+-			lseek64(fd, sparse_header.chunk_hdr_sz - CHUNK_HEADER_LEN, SEEK_CUR);
++			lseek(fd, sparse_header.chunk_hdr_sz - CHUNK_HEADER_LEN, SEEK_CUR);
+ 		}
+
+-		offset = lseek64(fd, 0, SEEK_CUR);
++		offset = lseek(fd, 0, SEEK_CUR);
+
+ 		ret = process_chunk(s, fd, offset, sparse_header.chunk_hdr_sz, &chunk_header,
+ 				cur_block, crc_ptr);
+@@ -451,7 +446,7 @@ struct sparse_file *sparse_file_import(int fd, bool verbose, bool crc)
+ 		return NULL;
+ 	}
+
+-	ret = lseek64(fd, 0, SEEK_SET);
++	ret = lseek(fd, 0, SEEK_SET);
+ 	if (ret < 0) {
+ 		verbose_error(verbose, ret, "seeking");
+ 		sparse_file_destroy(s);
+@@ -480,12 +475,12 @@ struct sparse_file *sparse_file_import_auto(int fd, bool crc, bool verbose)
+ 		return s;
+ 	}
+
+-	len = lseek64(fd, 0, SEEK_END);
++	len = lseek(fd, 0, SEEK_END);
+ 	if (len < 0) {
+ 		return NULL;
+ 	}
+
+-	lseek64(fd, 0, SEEK_SET);
++	lseek(fd, 0, SEEK_SET);
+
+ 	s = sparse_file_new(4096, len);
+ 	if (!s) {
+diff --git a/make_ext4fs.c b/make_ext4fs.c
+index cb18161..051052b 100644
+--- a/make_ext4fs.c
++++ b/make_ext4fs.c
+@@ -33,6 +33,7 @@
+ #include <unistd.h>
+ #include <sys/stat.h>
+ #include <sys/types.h>
++#include <locale.h>
+
+ /* TODO: Not implemented:
+    Allocating blocks in the same block group as the file inode
+@@ -44,6 +45,27 @@ static int filter_dot(const struct dirent *d)
+ 	return (strcmp(d->d_name, "..") && strcmp(d->d_name, "."));
+ }
+
++static u32 build_default_directory_structure(time_t fixed_time)
++{
++	u32 inode;
++	u32 root_inode;
++	struct dentry dentries = {
++		.filename = "lost+found",
++		.file_type = EXT4_FT_DIR,
++		.mode = S_IRWXU,
++		.uid = 0,
++		.gid = 0,
++		.mtime = (fixed_time != -1) ? fixed_time : 0,
++	};
++	root_inode = make_directory(0, 1, &dentries, 1);
++	inode = make_directory(root_inode, 0, NULL, 0);
++	*dentries.inode = inode;
++	inode_set_permissions(inode, dentries.mode,
++	        dentries.uid, dentries.gid, dentries.mtime);
++
++	return root_inode;
++}
++
+ /* Read a local directory and create the same tree in the generated filesystem.
+    Calls itself recursively with each directory in the given directory.
+    full_path is an absolute or relative path, with a trailing slash, to the
+@@ -66,6 +88,9 @@ static u32 build_directory_structure(const char *full_path, const char *dir_path
+ 	u32 dirs = 0;
+ 	bool needs_lost_and_found = false;
+
++	/* alphasort is locale-dependent; let's fix the locale to some sane value */
++	setlocale(LC_COLLATE, "C");
++
+ 	if (full_path) {
+ 		entries = scandir(full_path, &namelist, filter_dot, (void*)alphasort);
+ 		if (entries < 0) {
+@@ -233,12 +258,12 @@ static u32 build_directory_structure(const char *full_path, const char *dir_path
+ 	return inode;
+ }
+
+-static u32 compute_block_size()
++static u32 compute_block_size(void)
+ {
+ 	return 4096;
+ }
+
+-static u32 compute_journal_blocks()
++static u32 compute_journal_blocks(void)
+ {
+ 	u32 journal_blocks = DIV_ROUND_UP(info.len, info.block_size) / 64;
+ 	if (journal_blocks < 1024)
+@@ -248,17 +273,17 @@ static u32 compute_journal_blocks()
+ 	return journal_blocks;
+ }
+
+-static u32 compute_blocks_per_group()
++static u32 compute_blocks_per_group(void)
+ {
+ 	return info.block_size * 8;
+ }
+
+-static u32 compute_inodes()
++static u32 compute_inodes(void)
+ {
+ 	return DIV_ROUND_UP(info.len, info.block_size) / 4;
+ }
+
+-static u32 compute_inodes_per_group()
++static u32 compute_inodes_per_group(void)
+ {
+ 	u32 blocks = DIV_ROUND_UP(info.len, info.block_size);
+ 	u32 block_groups = DIV_ROUND_UP(blocks, info.blocks_per_group);
+@@ -273,7 +298,7 @@ static u32 compute_inodes_per_group()
+ 	return inodes;
+ }
+
+-static u32 compute_bg_desc_reserve_blocks()
++static u32 compute_bg_desc_reserve_blocks(void)
+ {
+ 	u32 blocks = DIV_ROUND_UP(info.len, info.block_size);
+ 	u32 block_groups = DIV_ROUND_UP(blocks, info.blocks_per_group);
+@@ -363,12 +388,8 @@ int make_ext4fs_internal(int fd, const char *_directory,
+ 	if (setjmp(setjmp_env))
+ 		return EXIT_FAILURE; /* Handle a call to longjmp() */
+
+-	if (_directory == NULL) {
+-		fprintf(stderr, "Need a source directory\n");
+-		return EXIT_FAILURE;
+-	}
+-
+-	directory = canonicalize_rel_slashes(_directory);
++	if (_directory)
++		directory = canonicalize_rel_slashes(_directory);
+
+ 	if (info.len <= 0)
+ 		info.len = get_file_size(fd);
+@@ -453,11 +474,15 @@ int make_ext4fs_internal(int fd, const char *_directory,
+ 	if (info.feat_compat & EXT4_FEATURE_COMPAT_RESIZE_INODE)
+ 		ext4_create_resize_inode();
+
+-	root_inode_num = build_directory_structure(directory, "", 0,
+-		fs_config_func, verbose, fixed_time);
++	if (directory)
++		root_inode_num = build_directory_structure(directory, "", 0,
++			fs_config_func, verbose, fixed_time);
++	else
++		root_inode_num = build_default_directory_structure(fixed_time);
+
+ 	root_mode = S_IRWXU | S_IRGRP | S_IXGRP | S_IROTH | S_IXOTH;
+-	inode_set_permissions(root_inode_num, root_mode, 0, 0, 0);
++	inode_set_permissions(root_inode_num, root_mode, 0, 0,
++		(fixed_time != 1) ? fixed_time : 0);
+
+ 	ext4_update_free();
+

@@ -1,0 +1,26 @@
+--- a/squashfs-tools/mksquashfs.c
++++ b/squashfs-tools/mksquashfs.c
+@@ -46,6 +46,9 @@
+ #include <setjmp.h>
+ #include <sys/ioctl.h>
+ #include <sys/types.h>
++#ifdef __GLIBC__
++#include <sys/sysmacros.h>
++#endif
+ #include <sys/mman.h>
+ #include <pthread.h>
+ #include <math.h>
+diff --git a/squashfs-tools/unsquashfs.c b/squashfs-tools/unsquashfs.c
+index 9a12651..da307de 100644
+--- a/squashfs-tools/unsquashfs.c
++++ b/squashfs-tools/unsquashfs.c
+@@ -30,6 +30,9 @@
+ #include "xattr.h"
+ 
+ #include <sys/types.h>
++#ifdef __GLIBC__
++#include <sys/sysmacros.h>
++#endif
+ 
+ struct cache *fragment_cache, *data_cache;
+ struct queue *to_reader, *to_deflate, *to_writer, *from_writer;

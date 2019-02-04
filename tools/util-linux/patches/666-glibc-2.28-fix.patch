@@ -1,0 +1,291 @@
+--- a/include/at.h
++++ b/include/at.h
+@@ -11,6 +11,9 @@
+ 
+ #include <stdio.h>
+ #include <sys/types.h>
++#ifdef __GLIBC__
++#include <sys/sysmacros.h>
++#endif
+ #include <sys/stat.h>
+ #include <unistd.h>
+ 
+diff --git a/include/blkdev.h b/include/blkdev.h
+index c994795..355926e 100644
+--- a/include/blkdev.h
++++ b/include/blkdev.h
+@@ -8,6 +8,9 @@
+ #define BLKDEV_H
+ 
+ #include <sys/types.h>
++#ifdef __GLIBC__
++#include <sys/sysmacros.h>
++#endif
+ #include <sys/ioctl.h>
+ #ifdef HAVE_SYS_IOCCOM_H
+ # include <sys/ioccom.h> /* for _IO macro on e.g. Solaris */
+diff --git a/include/c.h b/include/c.h
+index 2a317eb..15f528b 100644
+--- a/include/c.h
++++ b/include/c.h
+@@ -211,6 +211,9 @@ typedef int64_t loff_t;
+ 
+ #if !defined(HAVE_DIRFD) && (!defined(HAVE_DECL_DIRFD) || HAVE_DECL_DIRFD == 0) && defined(HAVE_DIR_DD_FD)
+ #include <sys/types.h>
++#ifdef __GLIBC__
++#include <sys/sysmacros.h>
++#endif
+ #include <dirent.h>
+ static inline int dirfd(DIR *d)
+ {
+diff --git a/include/crc32.h b/include/crc32.h
+index 2616910..f887acc 100644
+--- a/include/crc32.h
++++ b/include/crc32.h
+@@ -2,6 +2,9 @@
+ #define UL_NG_CRC32_H
+ 
+ #include <sys/types.h>
++#ifdef __GLIBC__
++#include <sys/sysmacros.h>
++#endif
+ #include <stdint.h>
+ 
+ extern uint32_t crc32(uint32_t seed, const unsigned char *buf, size_t len);
+diff --git a/include/crc64.h b/include/crc64.h
+index 40475d5..e215fdb 100644
+--- a/include/crc64.h
++++ b/include/crc64.h
+@@ -2,6 +2,9 @@
+ #define UTIL_LINUX_CRC64_H
+ 
+ #include <sys/types.h>
++#ifdef __GLIBC__
++#include <sys/sysmacros.h>
++#endif
+ #include <stdint.h>
+ 
+ extern uint64_t crc64(uint64_t seed, const unsigned char *data, size_t len);
+diff --git a/include/strutils.h b/include/strutils.h
+index ec2a8ac..6b29c97 100644
+--- a/include/strutils.h
++++ b/include/strutils.h
+@@ -5,6 +5,9 @@
+ #include <inttypes.h>
+ #include <string.h>
+ #include <sys/types.h>
++#ifdef __GLIBC__
++#include <sys/sysmacros.h>
++#endif
+ #include <ctype.h>
+ #include <stdio.h>
+ 
+diff --git a/include/sysfs.h b/include/sysfs.h
+index 5521378..a422ab7 100644
+--- a/include/sysfs.h
++++ b/include/sysfs.h
+@@ -10,6 +10,9 @@
+ #include <unistd.h>
+ #include <stdint.h>
+ #include <sys/types.h>
++#ifdef __GLIBC__
++#include <sys/sysmacros.h>
++#endif
+ #include <sys/stat.h>
+ #include <fcntl.h>
+ #include <string.h>
+diff --git a/libblkid/src/blkid.h b/libblkid/src/blkid.h
+index 1be299a..b2b1514 100644
+--- a/libblkid/src/blkid.h
++++ b/libblkid/src/blkid.h
+@@ -25,6 +25,9 @@
+ 
+ #include <stdint.h>
+ #include <sys/types.h>
++#ifdef __GLIBC__
++#include <sys/sysmacros.h>
++#endif
+ 
+ #ifdef __cplusplus
+ extern "C" {
+diff --git a/libblkid/src/blkidP.h b/libblkid/src/blkidP.h
+index 8060bcc..9b8e4f5 100644
+--- a/libblkid/src/blkidP.h
++++ b/libblkid/src/blkidP.h
+@@ -17,6 +17,9 @@
+ /* #define CONFIG_BLKID_VERIFY_UDEV 1 */
+ 
+ #include <sys/types.h>
++#ifdef __GLIBC__
++#include <sys/sysmacros.h>
++#endif
+ #include <dirent.h>
+ #include <sys/stat.h>
+ #include <stdio.h>
+diff --git a/libfdisk/src/fdiskP.h b/libfdisk/src/fdiskP.h
+index 2961095..cae388c 100644
+--- a/libfdisk/src/fdiskP.h
++++ b/libfdisk/src/fdiskP.h
+@@ -15,6 +15,9 @@
+ #include <string.h>
+ #include <sys/stat.h>
+ #include <sys/types.h>
++#ifdef __GLIBC__
++#include <sys/sysmacros.h>
++#endif
+ #include <unistd.h>
+ 
+ #include "c.h"
+diff --git a/libmount/python/fs.c b/libmount/python/fs.c
+index 0789d37..b2474bb 100644
+--- a/libmount/python/fs.c
++++ b/libmount/python/fs.c
+@@ -27,6 +27,9 @@
+ 
+ #include "pylibmount.h"
+ #include <errno.h>
++#ifdef __GLIBC__
++#include <sys/sysmacros.h>
++#endif
+ 
+ #define Fs_HELP "Fs(source=None, root=None, target=None, fstype=None, options=None, attributes=None, freq=0, passno=0)"
+ 
+diff --git a/libmount/src/libmount.h b/libmount/src/libmount.h
+index a88ec04..6e80d65 100644
+--- a/libmount/src/libmount.h
++++ b/libmount/src/libmount.h
+@@ -28,6 +28,9 @@ extern "C" {
+ #include <stdio.h>
+ #include <mntent.h>
+ #include <sys/types.h>
++#ifdef __GLIBC__
++#include <sys/sysmacros.h>
++#endif
+ 
+ #define LIBMOUNT_VERSION   "2.27.0"
+ #define LIBMOUNT_MAJOR_VERSION   2
+diff --git a/libmount/src/mountP.h b/libmount/src/mountP.h
+index 660e0ad..ac00590 100644
+--- a/libmount/src/mountP.h
++++ b/libmount/src/mountP.h
+@@ -15,6 +15,9 @@
+ #include <string.h>
+ #include <sys/stat.h>
+ #include <sys/types.h>
++#ifdef __GLIBC__
++#include <sys/sysmacros.h>
++#endif
+ #include <sys/vfs.h>
+ #include <unistd.h>
+ #include <stdio.h>
+diff --git a/libsmartcols/src/libsmartcols.h b/libsmartcols/src/libsmartcols.h
+index c218224..fc693c0 100644
+--- a/libsmartcols/src/libsmartcols.h
++++ b/libsmartcols/src/libsmartcols.h
+@@ -17,6 +17,9 @@ extern "C" {
+ #include <stdlib.h>
+ #include <stdio.h>
+ #include <sys/types.h>
++#ifdef __GLIBC__
++#include <sys/sysmacros.h>
++#endif
+ 
+ /**
+  * LIBSMARTCOLS_VERSION:
+diff --git a/libuuid/src/uuid.h b/libuuid/src/uuid.h
+index 30bd4c0..239100a 100644
+--- a/libuuid/src/uuid.h
++++ b/libuuid/src/uuid.h
+@@ -36,6 +36,9 @@
+ #define _UUID_UUID_H
+ 
+ #include <sys/types.h>
++#ifdef __GLIBC__
++#include <sys/sysmacros.h>
++#endif
+ #ifndef _WIN32
+ #include <sys/time.h>
+ #endif
+diff --git a/libuuid/src/uuidP.h b/libuuid/src/uuidP.h
+index 86a5e26..196e76b 100644
+--- a/libuuid/src/uuidP.h
++++ b/libuuid/src/uuidP.h
+@@ -34,6 +34,9 @@
+ 
+ #include <inttypes.h>
+ #include <sys/types.h>
++#ifdef __GLIBC__
++#include <sys/sysmacros.h>
++#endif
+ 
+ #include "uuid.h"
+ 
+diff --git a/login-utils/auth.h b/login-utils/auth.h
+index bf7c369..cc02367 100644
+--- a/login-utils/auth.h
++++ b/login-utils/auth.h
+@@ -9,5 +9,8 @@
+  */
+ 
+ #include <sys/types.h>
++#ifdef __GLIBC__
++#include <sys/sysmacros.h>
++#endif
+ 
+ extern int auth_pam(const char *service_name, uid_t uid, const char *username);
+diff --git a/login-utils/libuser.h b/login-utils/libuser.h
+index 7454b99..720acc8 100644
+--- a/login-utils/libuser.h
++++ b/login-utils/libuser.h
+@@ -9,6 +9,9 @@
+  */
+ 
+ #include <sys/types.h>
++#ifdef __GLIBC__
++#include <sys/sysmacros.h>
++#endif
+ 
+ extern int set_value_libuser(const char *service_name, const char *username,
+ 			uid_t uid, const char *attr, const char *val);
+diff --git a/login-utils/sulogin-consoles.h b/login-utils/sulogin-consoles.h
+index f762e87..3be94cb 100644
+--- a/login-utils/sulogin-consoles.h
++++ b/login-utils/sulogin-consoles.h
+@@ -25,6 +25,9 @@
+ #define UTIL_LINUX_SULOGIN_CONSOLES_H
+ 
+ #include <sys/types.h>
++#ifdef __GLIBC__
++#include <sys/sysmacros.h>
++#endif
+ #include <stdint.h>
+ #include <stdio.h>
+ #include <termios.h>
+diff --git a/sys-utils/ipcutils.h b/sys-utils/ipcutils.h
+index 26fbbcf..ff73d38 100644
+--- a/sys-utils/ipcutils.h
++++ b/sys-utils/ipcutils.h
+@@ -8,6 +8,9 @@
+ #include <sys/sem.h>
+ #include <sys/shm.h>
+ #include <sys/types.h>
++#ifdef __GLIBC__
++#include <sys/sysmacros.h>
++#endif
+ #include <time.h>
+ #include <unistd.h>
+ #include <grp.h>
+diff --git a/sys-utils/mountpoint.c b/sys-utils/mountpoint.c
+index a43bfd6..b151399 100644
+--- a/sys-utils/mountpoint.c
++++ b/sys-utils/mountpoint.c
+@@ -30,6 +30,9 @@
+ #include <getopt.h>
+ #include <unistd.h>
+ #include <sys/types.h>
++#ifdef __GLIBC__
++#include <sys/sysmacros.h>
++#endif
+ #include <sys/stat.h>
+ 
+ #include <libmount.h>
